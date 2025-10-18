@@ -29,6 +29,7 @@ let offsetY = 0;
 // Visualization and particle system instances
 let poseVisualizer;
 let particleSystem;
+let smokeSystem;
 let cameraOpacity = 100; // New variable to control camera visibility
 
 // Configuration for the pose detection model
@@ -56,6 +57,9 @@ const visualSettings = {
 function preload() {
   // Load the bodyPose model with configuration
   bodyPose = ml5.bodyPose(poseConfig);
+
+  // Load smoke texture
+  loadSmokeTexture();
 }
 
 function setup() {
@@ -79,6 +83,7 @@ function setup() {
   // Initialize visualization and particle systems
   poseVisualizer = new PoseVisualizer();
   particleSystem = new ParticleSystem();
+  smokeSystem = new SmokeSystem();
 
   // console.log("ImproterAI Pose Detection initialized");
   // console.log("Skeleton connections:", connections);
@@ -179,6 +184,9 @@ function displayPoseInfo() {
   if (poseVisualizer.paintMode === "particles") {
     const particleCount = particleSystem.getTotalParticles();
     text(`Particles: ${particleCount}`, 10, 45);
+  } else if (poseVisualizer.paintMode === "smoke") {
+    const smokeCount = smokeSystem.getTotalParticles();
+    text(`Smoke: ${smokeCount}`, 10, 45);
   }
 }
 
@@ -268,18 +276,36 @@ function setupUI() {
     const paintingControls = document.getElementById("painting-controls");
     const particleCountControls = document.getElementById("particle-count-controls");
     const particleSizeControls = document.getElementById("particle-size-controls");
+    const smokeDensityControls = document.getElementById("smoke-density-controls");
+    const windStrengthControls = document.getElementById("wind-strength-controls");
+    const smokeSizeControls = document.getElementById("smoke-size-controls");
+
     if (e.target.value === "particles") {
       noiseControls.style.display = "flex";
       burstControls.style.display = "flex";
       paintingControls.style.display = "flex";
       particleCountControls.style.display = "flex";
       particleSizeControls.style.display = "flex";
+      smokeDensityControls.style.display = "none";
+      windStrengthControls.style.display = "none";
+    } else if (e.target.value === "smoke") {
+      noiseControls.style.display = "none";
+      burstControls.style.display = "none";
+      paintingControls.style.display = "none";
+      particleCountControls.style.display = "none";
+      particleSizeControls.style.display = "none";
+      smokeDensityControls.style.display = "flex";
+      windStrengthControls.style.display = "flex";
+      smokeSizeControls.style.display = "flex";
     } else {
       noiseControls.style.display = "none";
       burstControls.style.display = "none";
       paintingControls.style.display = "none";
       particleCountControls.style.display = "none";
       particleSizeControls.style.display = "none";
+      smokeDensityControls.style.display = "none";
+      windStrengthControls.style.display = "none";
+      smokeSizeControls.style.display = "none";
     }
   });
 
@@ -358,6 +384,33 @@ function setupUI() {
     const size = parseInt(e.target.value);
     particleSystem.setParticleSize(size);
     particleSizeValue.textContent = size + "px";
+  });
+
+  // Smoke density slider
+  const smokeDensitySlider = document.getElementById("smoke-density");
+  const smokeDensityValue = document.getElementById("smoke-density-value");
+  smokeDensitySlider.addEventListener("input", (e) => {
+    const density = parseInt(e.target.value);
+    smokeSystem.setSmokeDensity(density);
+    smokeDensityValue.textContent = density;
+  });
+
+  // Wind strength slider
+  const windStrengthSlider = document.getElementById("wind-strength");
+  const windStrengthValue = document.getElementById("wind-strength-value");
+  windStrengthSlider.addEventListener("input", (e) => {
+    const strength = parseInt(e.target.value);
+    smokeSystem.setWindStrength(strength);
+    windStrengthValue.textContent = strength + "%";
+  });
+
+  // Smoke size slider
+  const smokeSizeSlider = document.getElementById("smoke-size");
+  const smokeSizeValue = document.getElementById("smoke-size-value");
+  smokeSizeSlider.addEventListener("input", (e) => {
+    const size = parseInt(e.target.value);
+    smokeSystem.setSmokeSize(size);
+    smokeSizeValue.textContent = size + "px";
   });
 }
 
@@ -502,6 +555,18 @@ function paintOnCanvas() {
       };
       particleSystem.emitFromPose(scaledPose, connections, visualSettings.minConfidence);
     }
+  } else if (poseVisualizer.paintMode === "smoke") {
+    for (let pose of poses) {
+      // Create a scaled copy of the pose for smoke
+      let scaledPose = {
+        keypoints: pose.keypoints.map((keypoint) => ({
+          x: keypoint.x * scaleX,
+          y: keypoint.y * scaleY,
+          confidence: keypoint.confidence,
+        })),
+      };
+      smokeSystem.emitFromPose(scaledPose, visualSettings.minConfidence);
+    }
   } else {
     // Use the pose visualizer for other modes with scaled poses
     let scaledPoses = poses.map((pose) => ({
@@ -522,6 +587,7 @@ function clearVisualizationCanvas() {
   background(0);
   poseVisualizer.clearTrails();
   particleSystem.clear();
+  smokeSystem.clear();
 }
 
 // Save visualization canvas
@@ -535,4 +601,20 @@ function saveVisualizationCanvas() {
 function updateParticles() {
   particleSystem.update();
   particleSystem.draw();
+
+  // Update smoke system if in smoke mode
+  if (poseVisualizer.paintMode === "smoke") {
+    // Apply wind force based on mouse position (like reference code)
+    // Ensure we're using the correct canvas dimensions
+    let canvasWidth = width;
+    let mousePosX = mouseX;
+
+    // Clamp mouse position to canvas bounds to avoid issues
+    mousePosX = constrain(mousePosX, 0, canvasWidth);
+
+    let dx = map(mousePosX, 0, canvasWidth, -0.2, 0.2);
+    let wind = createVector(dx, 0);
+    smokeSystem.applyForce(wind);
+    smokeSystem.run();
+  }
 }

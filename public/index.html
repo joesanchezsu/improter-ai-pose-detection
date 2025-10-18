@@ -4,10 +4,11 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>ImproterAI - Pose Detection with p5.js & ml5.js</title>
-    <script src="https://cdnjs.cloudflare.com/ajax/libs/p5.js/1.9.4/p5.min.js"></script>
-    <script src="https://unpkg.com/ml5@1/dist/ml5.min.js"></script>
-    <script src="particle-system.js"></script>
-    <script src="pose-visualizer.js"></script>
+        <script src="https://cdnjs.cloudflare.com/ajax/libs/p5.js/1.9.4/p5.min.js"></script>
+        <script src="https://unpkg.com/ml5@1/dist/ml5.min.js"></script>
+        <script src="particle-system.js"></script>
+        <script src="pose-visualizer.js"></script>
+        <script src="smoke-system.js"></script>
     <style>
         body {
             margin: 0;
@@ -231,13 +232,14 @@
         <div class="visualization-controls">
             <div class="control-group">
                 <label for="paint-mode">Paint Mode:</label>
-                <select id="paint-mode">
-                    <option value="keypoints">Keypoints Only</option>
-                    <option value="skeleton">Skeleton Lines</option>
-                    <option value="trails">Pose Trails</option>
-                    <option value="circles">Growing Circles</option>
-                    <option value="particles">Particle System</option>
-                </select>
+                    <select id="paint-mode">
+                        <option value="keypoints">Keypoints Only</option>
+                        <option value="skeleton">Skeleton Lines</option>
+                        <option value="trails">Pose Trails</option>
+                        <option value="circles">Growing Circles</option>
+                        <option value="particles">Particle System</option>
+                        <option value="smoke">Smoke System</option>
+                    </select>
             </div>
             <div class="control-group">
                 <label for="paint-color">Color:</label>
@@ -282,6 +284,21 @@
                 <label for="particle-size">Particle Size:</label>
                 <input type="range" id="particle-size" min="1" max="20" value="3">
                 <span id="particle-size-value">3px</span>
+            </div>
+            <div class="control-group" id="smoke-density-controls" style="display: none;">
+                <label for="smoke-density">Smoke Density:</label>
+                <input type="range" id="smoke-density" min="1" max="10" value="3">
+                <span id="smoke-density-value">3</span>
+            </div>
+            <div class="control-group" id="wind-strength-controls" style="display: none;">
+                <label for="wind-strength">Wind Strength:</label>
+                <input type="range" id="wind-strength" min="0" max="100" value="20">
+                <span id="wind-strength-value">20%</span>
+            </div>
+            <div class="control-group" id="smoke-size-controls" style="display: none;">
+                <label for="smoke-size">Smoke Size:</label>
+                <input type="range" id="smoke-size" min="10" max="100" value="50">
+                <span id="smoke-size-value">50px</span>
             </div>
         </div>
     </div>
