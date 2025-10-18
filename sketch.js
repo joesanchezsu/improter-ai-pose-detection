@@ -21,12 +21,9 @@ let cameraCanvas;
 let isCameraActive = false;
 let previousPoses = [];
 
-// Painting variables
-let paintMode = "keypoints";
-let paintColor = "#ff0000";
-let paintSize = 10;
-let paintOpacity = 80;
-let poseTrails = [];
+// Visualization and particle system instances
+let poseVisualizer;
+let particleSystem;
 let cameraOpacity = 100; // New variable to control camera visibility
 
 // Configuration for the pose detection model
@@ -73,8 +70,12 @@ function setup() {
   // Setup UI event listeners
   setupUI();
 
-  console.log("ImproterAI Pose Detection initialized");
-  console.log("Skeleton connections:", connections);
+  // Initialize visualization and particle systems
+  poseVisualizer = new PoseVisualizer();
+  particleSystem = new ParticleSystem();
+
+  // console.log("ImproterAI Pose Detection initialized");
+  // console.log("Skeleton connections:", connections);
 }
 
 function draw() {
@@ -89,16 +90,19 @@ function draw() {
     noTint(); // Reset tint for other drawings
 
     // Draw the skeleton connections
-    drawSkeleton();
+    // drawSkeleton();
 
     // Draw all the tracked landmark points
-    drawKeypoints();
+    // drawKeypoints();
 
     // Display pose count
-    displayPoseInfo();
+    // displayPoseInfo();
 
     // Paint visualizations on the same canvas
     paintOnCanvas();
+
+    // Update and draw particles
+    updateParticles();
   } else {
     // Show "Camera Stopped" message
     fill(255);
@@ -151,12 +155,18 @@ function drawKeypoints() {
 }
 
 function displayPoseInfo() {
-  // Display pose count in top-left corner
+  // Display pose count and particle count in top-left corner
   fill(255);
   noStroke();
   textAlign(LEFT);
   textSize(16);
-  text(`Poses detected: ${poses.length}`, 10, 25);
+  text(`Poses: ${poses.length}`, 10, 25);
+
+  // Show particle count for performance monitoring
+  if (poseVisualizer.paintMode === "particles") {
+    const particleCount = particleSystem.getTotalParticles();
+    text(`Particles: ${particleCount}`, 10, 45);
+  }
 }
 
 // Callback function for when bodyPose outputs data
@@ -165,9 +175,9 @@ function gotPoses(results) {
   poses = results;
 
   // Log pose data for debugging (optional)
-  if (poses.length > 0) {
-    console.log(`Detected ${poses.length} pose(s)`);
-  }
+  // if (poses.length > 0) {
+  //   console.log(`Detected ${poses.length} pose(s)`);
+  // }
 }
 
 // Utility function to get pose data (can be used for further processing)
@@ -219,29 +229,42 @@ function setupUI() {
   // Paint mode selector
   const paintModeSelect = document.getElementById("paint-mode");
   paintModeSelect.addEventListener("change", (e) => {
-    paintMode = e.target.value;
+    poseVisualizer.setMode(e.target.value);
+
+    // Show/hide particle controls based on mode
+    const noiseControls = document.getElementById("noise-controls");
+    const burstControls = document.getElementById("burst-controls");
+    if (e.target.value === "particles") {
+      noiseControls.style.display = "flex";
+      burstControls.style.display = "flex";
+    } else {
+      noiseControls.style.display = "none";
+      burstControls.style.display = "none";
+    }
   });
 
   // Color picker
   const colorPicker = document.getElementById("paint-color");
   colorPicker.addEventListener("change", (e) => {
-    paintColor = e.target.value;
+    poseVisualizer.setColor(e.target.value);
   });
 
   // Size slider
   const sizeSlider = document.getElementById("paint-size");
   const sizeValue = document.getElementById("size-value");
   sizeSlider.addEventListener("input", (e) => {
-    paintSize = parseInt(e.target.value);
-    sizeValue.textContent = paintSize;
+    const size = parseInt(e.target.value);
+    poseVisualizer.setSize(size);
+    sizeValue.textContent = size;
   });
 
   // Opacity slider
   const opacitySlider = document.getElementById("opacity");
   const opacityValue = document.getElementById("opacity-value");
   opacitySlider.addEventListener("input", (e) => {
-    paintOpacity = parseInt(e.target.value);
-    opacityValue.textContent = paintOpacity + "%";
+    const opacity = parseInt(e.target.value);
+    poseVisualizer.setOpacity(opacity);
+    opacityValue.textContent = opacity + "%";
   });
 
   // Camera opacity slider
@@ -250,6 +273,24 @@ function setupUI() {
   cameraOpacitySlider.addEventListener("input", (e) => {
     cameraOpacity = parseInt(e.target.value);
     cameraOpacityValue.textContent = cameraOpacity + "%";
+  });
+
+  // Noise strength slider
+  const noiseStrengthSlider = document.getElementById("noise-strength");
+  const noiseStrengthValue = document.getElementById("noise-strength-value");
+  noiseStrengthSlider.addEventListener("input", (e) => {
+    const strength = parseInt(e.target.value);
+    particleSystem.setNoiseStrength(strength / 100); // Convert to 0-2 range
+    noiseStrengthValue.textContent = strength + "%";
+  });
+
+  // Burst timing slider
+  const burstTimingSlider = document.getElementById("burst-timing");
+  const burstTimingValue = document.getElementById("burst-timing-value");
+  burstTimingSlider.addEventListener("input", (e) => {
+    const timing = parseInt(e.target.value);
+    particleSystem.setBurstParameters(timing, 8, 2); // interval, burstSize, minParticles
+    burstTimingValue.textContent = (timing / 1000).toFixed(1) + "s";
   });
 }
 
@@ -280,110 +321,24 @@ function toggleCamera() {
 function paintOnCanvas() {
   if (poses.length === 0) return;
 
-  for (let i = 0; i < poses.length; i++) {
-    let pose = poses[i];
-
-    switch (paintMode) {
-      case "keypoints":
-        paintKeypointsOnCanvas(pose);
-        break;
-      case "skeleton":
-        paintSkeletonOnCanvas(pose);
-        break;
-      case "trails":
-        paintTrailsOnCanvas(pose, i);
-        break;
-      case "circles":
-        paintGrowingCirclesOnCanvas(pose);
-        break;
+  // Handle particle mode separately
+  if (poseVisualizer.paintMode === "particles") {
+    for (let pose of poses) {
+      particleSystem.emitFromPose(pose, visualSettings.minConfidence);
     }
+  } else {
+    // Use the pose visualizer for other modes
+    poseVisualizer.visualize(poses, connections, visualSettings.minConfidence);
   }
 }
 
-// Paint individual keypoints on main canvas
-function paintKeypointsOnCanvas(pose) {
-  for (let j = 0; j < pose.keypoints.length; j++) {
-    let keypoint = pose.keypoints[j];
-    if (keypoint.confidence > visualSettings.minConfidence) {
-      // Convert hex color to RGB
-      const rgb = hexToRgb(paintColor);
-      fill(rgb.r, rgb.g, rgb.b, paintOpacity);
-      noStroke();
-      circle(keypoint.x, keypoint.y, paintSize);
-    }
-  }
-}
+// Old painting functions removed - now handled by PoseVisualizer class
 
-// Paint skeleton connections on main canvas
-function paintSkeletonOnCanvas(pose) {
-  for (let j = 0; j < connections.length; j++) {
-    let pointAIndex = connections[j][0];
-    let pointBIndex = connections[j][1];
-    let pointA = pose.keypoints[pointAIndex];
-    let pointB = pose.keypoints[pointBIndex];
-
-    if (
-      pointA.confidence > visualSettings.minConfidence &&
-      pointB.confidence > visualSettings.minConfidence
-    ) {
-      // Convert hex color to RGB
-      const rgb = hexToRgb(paintColor);
-      stroke(rgb.r, rgb.g, rgb.b, paintOpacity);
-      strokeWeight(paintSize / 2);
-      line(pointA.x, pointA.y, pointB.x, pointB.y);
-    }
-  }
-}
-
-// Paint pose trails on main canvas
-function paintTrailsOnCanvas(pose, poseIndex) {
-  // Store current pose for trails
-  if (!poseTrails[poseIndex]) {
-    poseTrails[poseIndex] = [];
-  }
-
-  // Add current keypoints to trail
-  let currentKeypoints = [];
-  for (let j = 0; j < pose.keypoints.length; j++) {
-    let keypoint = pose.keypoints[j];
-    if (keypoint.confidence > visualSettings.minConfidence) {
-      currentKeypoints.push({ x: keypoint.x, y: keypoint.y });
-    }
-  }
-
-  poseTrails[poseIndex].push(currentKeypoints);
-
-  // Limit trail length
-  if (poseTrails[poseIndex].length > 20) {
-    poseTrails[poseIndex].shift();
-  }
-
-  // Draw trail
-  for (let t = 1; t < poseTrails[poseIndex].length; t++) {
-    let currKeypoints = poseTrails[poseIndex][t];
-    for (let k = 0; k < currKeypoints.length; k++) {
-      let alpha = (t / poseTrails[poseIndex].length) * paintOpacity;
-      const rgb = hexToRgb(paintColor);
-      fill(rgb.r, rgb.g, rgb.b, alpha);
-      noStroke();
-      circle(currKeypoints[k].x, currKeypoints[k].y, paintSize * 0.5);
-    }
-  }
-}
-
-// Paint growing circles on main canvas
-function paintGrowingCirclesOnCanvas(pose) {
-  for (let j = 0; j < pose.keypoints.length; j++) {
-    let keypoint = pose.keypoints[j];
-    if (keypoint.confidence > visualSettings.minConfidence) {
-      let time = millis() * 0.001;
-      let size = paintSize + sin(time + j) * paintSize * 0.5;
-      const rgb = hexToRgb(paintColor);
-      fill(rgb.r, rgb.g, rgb.b, paintOpacity);
-      noStroke();
-      circle(keypoint.x, keypoint.y, size);
-    }
-  }
+// Clear visualization (clear the entire canvas)
+function clearVisualizationCanvas() {
+  background(0);
+  poseVisualizer.clearTrails();
+  particleSystem.clear();
 }
 
 // Save visualization canvas
@@ -391,14 +346,10 @@ function saveVisualizationCanvas() {
   saveCanvas("pose-artwork.png");
 }
 
-// Convert hex color to RGB
-function hexToRgb(hex) {
-  const result = /^#?([a-f\d]{2})([a-f\d]{2})([a-f\d]{2})$/i.exec(hex);
-  return result
-    ? {
-        r: parseInt(result[1], 16),
-        g: parseInt(result[2], 16),
-        b: parseInt(result[3], 16),
-      }
-    : null;
+// Old particle system functions removed - now handled by ParticleSystem class
+
+// Update all particle emitters
+function updateParticles() {
+  particleSystem.update();
+  particleSystem.draw();
 }

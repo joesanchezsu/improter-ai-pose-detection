@@ -6,6 +6,8 @@
     <title>ImproterAI - Pose Detection with p5.js & ml5.js</title>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/p5.js/1.9.4/p5.min.js"></script>
     <script src="https://unpkg.com/ml5@1/dist/ml5.min.js"></script>
+    <script src="particle-system.js"></script>
+    <script src="pose-visualizer.js"></script>
     <style>
         body {
             margin: 0;
@@ -160,6 +162,7 @@
                     <option value="skeleton">Skeleton Lines</option>
                     <option value="trails">Pose Trails</option>
                     <option value="circles">Growing Circles</option>
+                    <option value="particles">Particle System</option>
                 </select>
             </div>
             <div class="control-group">
@@ -180,6 +183,16 @@
                 <label for="camera-opacity">Camera Opacity:</label>
                 <input type="range" id="camera-opacity" min="0" max="100" value="100">
                 <span id="camera-opacity-value">100%</span>
+            </div>
+            <div class="control-group" id="noise-controls" style="display: none;">
+                <label for="noise-strength">Noise Strength:</label>
+                <input type="range" id="noise-strength" min="0" max="200" value="50">
+                <span id="noise-strength-value">50%</span>
+            </div>
+            <div class="control-group" id="burst-controls" style="display: none;">
+                <label for="burst-timing">Burst Timing:</label>
+                <input type="range" id="burst-timing" min="500" max="5000" value="2000">
+                <span id="burst-timing-value">2.0s</span>
             </div>
         </div>
     </div>
