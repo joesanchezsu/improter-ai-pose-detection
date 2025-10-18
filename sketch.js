@@ -20,6 +20,11 @@ let connections;
 let cameraCanvas;
 let isCameraActive = false;
 let previousPoses = [];
+let isFullscreen = false;
+let scaleX = 1;
+let scaleY = 1;
+let offsetX = 0;
+let offsetY = 0;
 
 // Visualization and particle system instances
 let poseVisualizer;
@@ -58,8 +63,9 @@ function setup() {
   cameraCanvas = createCanvas(640, 480);
   cameraCanvas.parent("camera-container");
 
-  // Create the video capture (but don't start it yet)
+  // Create the video capture with standard resolution to avoid cropping
   video = createCapture(VIDEO);
+  // Use standard webcam resolution to avoid aspect ratio issues
   video.size(640, 480);
   video.hide();
   video.stop(); // Stop the video initially
@@ -84,8 +90,13 @@ function draw() {
 
   // Only draw video and pose detection if camera is active
   if (isCameraActive) {
+    // Calculate scaling factors for pose coordinates
+    scaleX = width / video.width;
+    scaleY = height / video.height;
+
     // Draw the webcam video with opacity control
     tint(255, cameraOpacity);
+    // Draw video at full canvas size (no cropping)
     image(video, 0, 0, width, height);
     noTint(); // Reset tint for other drawings
 
@@ -96,7 +107,7 @@ function draw() {
     // drawKeypoints();
 
     // Display pose count
-    // displayPoseInfo();
+    displayPoseInfo();
 
     // Paint visualizations on the same canvas
     paintOnCanvas();
@@ -132,7 +143,8 @@ function drawSkeleton() {
       ) {
         stroke(visualSettings.skeletonColor);
         strokeWeight(visualSettings.strokeWeight);
-        line(pointA.x, pointA.y, pointB.x, pointB.y);
+        // Scale coordinates to match canvas size
+        line(pointA.x * scaleX, pointA.y * scaleY, pointB.x * scaleX, pointB.y * scaleY);
       }
     }
   }
@@ -148,7 +160,8 @@ function drawKeypoints() {
       if (keypoint.confidence > visualSettings.minConfidence) {
         fill(visualSettings.keypointColor);
         noStroke();
-        circle(keypoint.x, keypoint.y, visualSettings.keypointSize);
+        // Scale coordinates to match canvas size
+        circle(keypoint.x * scaleX, keypoint.y * scaleY, visualSettings.keypointSize);
       }
     }
   }
@@ -226,6 +239,24 @@ function setupUI() {
   const saveCanvas = document.getElementById("save-canvas");
   saveCanvas.addEventListener("click", saveVisualizationCanvas);
 
+  // Fullscreen toggle button
+  const fullscreenToggle = document.getElementById("fullscreen-toggle");
+  fullscreenToggle.addEventListener("click", toggleFullscreen);
+
+  // Keyboard support for fullscreen
+  document.addEventListener("keydown", (e) => {
+    if (e.key === "F11" || (e.key === "Escape" && isFullscreen)) {
+      e.preventDefault();
+      toggleFullscreen();
+    }
+  });
+
+  // Handle native fullscreen changes
+  document.addEventListener("fullscreenchange", handleFullscreenChange);
+  document.addEventListener("webkitfullscreenchange", handleFullscreenChange);
+  document.addEventListener("mozfullscreenchange", handleFullscreenChange);
+  document.addEventListener("MSFullscreenChange", handleFullscreenChange);
+
   // Paint mode selector
   const paintModeSelect = document.getElementById("paint-mode");
   paintModeSelect.addEventListener("change", (e) => {
@@ -234,12 +265,21 @@ function setupUI() {
     // Show/hide particle controls based on mode
     const noiseControls = document.getElementById("noise-controls");
     const burstControls = document.getElementById("burst-controls");
+    const paintingControls = document.getElementById("painting-controls");
+    const particleCountControls = document.getElementById("particle-count-controls");
+    const particleSizeControls = document.getElementById("particle-size-controls");
     if (e.target.value === "particles") {
       noiseControls.style.display = "flex";
       burstControls.style.display = "flex";
+      paintingControls.style.display = "flex";
+      particleCountControls.style.display = "flex";
+      particleSizeControls.style.display = "flex";
     } else {
       noiseControls.style.display = "none";
       burstControls.style.display = "none";
+      paintingControls.style.display = "none";
+      particleCountControls.style.display = "none";
+      particleSizeControls.style.display = "none";
     }
   });
 
@@ -292,6 +332,33 @@ function setupUI() {
     particleSystem.setBurstParameters(timing, 8, 2); // interval, burstSize, minParticles
     burstTimingValue.textContent = (timing / 1000).toFixed(1) + "s";
   });
+
+  // Painting intensity slider
+  const paintingIntensitySlider = document.getElementById("painting-intensity");
+  const paintingIntensityValue = document.getElementById("painting-intensity-value");
+  paintingIntensitySlider.addEventListener("input", (e) => {
+    const intensity = parseInt(e.target.value);
+    particleSystem.setPaintingIntensity(intensity);
+    paintingIntensityValue.textContent = intensity + "ms";
+  });
+
+  // Particle count slider
+  const particleCountSlider = document.getElementById("particle-count");
+  const particleCountValue = document.getElementById("particle-count-value");
+  particleCountSlider.addEventListener("input", (e) => {
+    const count = parseInt(e.target.value);
+    particleSystem.setParticleCount(count);
+    particleCountValue.textContent = count;
+  });
+
+  // Particle size slider
+  const particleSizeSlider = document.getElementById("particle-size");
+  const particleSizeValue = document.getElementById("particle-size-value");
+  particleSizeSlider.addEventListener("input", (e) => {
+    const size = parseInt(e.target.value);
+    particleSystem.setParticleSize(size);
+    particleSizeValue.textContent = size + "px";
+  });
 }
 
 // Toggle camera on/off
@@ -317,6 +384,107 @@ function toggleCamera() {
   }
 }
 
+// Toggle fullscreen mode
+function toggleFullscreen() {
+  const button = document.getElementById("fullscreen-toggle");
+  const container = document.querySelector(".container");
+
+  if (!isFullscreen) {
+    // Enter fullscreen using browser API
+    if (container.requestFullscreen) {
+      container.requestFullscreen();
+    } else if (container.webkitRequestFullscreen) {
+      container.webkitRequestFullscreen();
+    } else if (container.msRequestFullscreen) {
+      container.msRequestFullscreen();
+    }
+
+    container.classList.add("fullscreen-mode");
+    isFullscreen = true;
+    button.textContent = "📱 Exit Fullscreen";
+    button.classList.remove("btn-secondary");
+    button.classList.add("btn-primary");
+
+    // Calculate fullscreen canvas size maintaining aspect ratio
+    setTimeout(() => {
+      const aspectRatio = 640 / 480; // 4:3 aspect ratio
+      let canvasWidth, canvasHeight;
+
+      if (window.innerWidth / window.innerHeight > aspectRatio) {
+        // Screen is wider than video aspect ratio
+        canvasHeight = window.innerHeight;
+        canvasWidth = canvasHeight * aspectRatio;
+      } else {
+        // Screen is taller than video aspect ratio
+        canvasWidth = window.innerWidth;
+        canvasHeight = canvasWidth / aspectRatio;
+      }
+
+      resizeCanvas(canvasWidth, canvasHeight);
+    }, 100);
+  } else {
+    // Exit fullscreen
+    if (document.exitFullscreen) {
+      document.exitFullscreen();
+    } else if (document.webkitExitFullscreen) {
+      document.webkitExitFullscreen();
+    } else if (document.msExitFullscreen) {
+      document.msExitFullscreen();
+    }
+
+    container.classList.remove("fullscreen-mode");
+    isFullscreen = false;
+    button.textContent = "🖥️ Fullscreen";
+    button.classList.remove("btn-primary");
+    button.classList.add("btn-secondary");
+
+    // Resize canvas back to normal
+    resizeCanvas(640, 480);
+  }
+}
+
+// Handle window resize
+function windowResized() {
+  if (isFullscreen) {
+    const aspectRatio = 640 / 480;
+    let canvasWidth, canvasHeight;
+
+    if (window.innerWidth / window.innerHeight > aspectRatio) {
+      canvasHeight = window.innerHeight;
+      canvasWidth = canvasHeight * aspectRatio;
+    } else {
+      canvasWidth = window.innerWidth;
+      canvasHeight = canvasWidth / aspectRatio;
+    }
+
+    resizeCanvas(canvasWidth, canvasHeight);
+  }
+}
+
+// Handle native fullscreen changes
+function handleFullscreenChange() {
+  const isCurrentlyFullscreen = !!(
+    document.fullscreenElement ||
+    document.webkitFullscreenElement ||
+    document.mozFullScreenElement ||
+    document.msFullscreenElement
+  );
+
+  if (!isCurrentlyFullscreen && isFullscreen) {
+    // User exited fullscreen using browser controls
+    const button = document.getElementById("fullscreen-toggle");
+    const container = document.querySelector(".container");
+
+    container.classList.remove("fullscreen-mode");
+    isFullscreen = false;
+    button.textContent = "🖥️ Fullscreen";
+    button.classList.remove("btn-primary");
+    button.classList.add("btn-secondary");
+
+    resizeCanvas(640, 480);
+  }
+}
+
 // Paint visualizations directly on the main canvas
 function paintOnCanvas() {
   if (poses.length === 0) return;
@@ -324,11 +492,26 @@ function paintOnCanvas() {
   // Handle particle mode separately
   if (poseVisualizer.paintMode === "particles") {
     for (let pose of poses) {
-      particleSystem.emitFromPose(pose, visualSettings.minConfidence);
+      // Create a scaled copy of the pose for particles
+      let scaledPose = {
+        keypoints: pose.keypoints.map((keypoint) => ({
+          x: keypoint.x * scaleX,
+          y: keypoint.y * scaleY,
+          confidence: keypoint.confidence,
+        })),
+      };
+      particleSystem.emitFromPose(scaledPose, connections, visualSettings.minConfidence);
     }
   } else {
-    // Use the pose visualizer for other modes
-    poseVisualizer.visualize(poses, connections, visualSettings.minConfidence);
+    // Use the pose visualizer for other modes with scaled poses
+    let scaledPoses = poses.map((pose) => ({
+      keypoints: pose.keypoints.map((keypoint) => ({
+        x: keypoint.x * scaleX,
+        y: keypoint.y * scaleY,
+        confidence: keypoint.confidence,
+      })),
+    }));
+    poseVisualizer.visualize(scaledPoses, connections, visualSettings.minConfidence);
   }
 }
 

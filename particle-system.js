@@ -93,12 +93,12 @@ class Particle {
     this.x += this.vx;
     this.y += this.vy;
 
-    // Apply friction
-    this.vx *= 0.98;
-    this.vy *= 0.98;
+    // Apply friction (slower for longer trails)
+    this.vx *= 0.995;
+    this.vy *= 0.995;
 
-    // Decay life
-    this.life -= 0.015;
+    // Decay life (much slower for painting effect)
+    this.life -= 0.003;
 
     if (this.life <= 0) {
       this.active = false;
@@ -127,12 +127,13 @@ class ParticleEmitter {
     this.maxParticles = maxParticles;
     this.particles = [];
     this.particlePool = [];
+    this.baseSize = 3; // Default particle size
 
-    // Burst emission properties
+    // Burst emission properties for painting effect
     this.lastEmissionTime = 0;
-    this.emissionInterval = 1000; // 2 seconds between bursts
-    this.burstSize = 20; // Number of particles per burst
-    this.minParticlesForNewBurst = 10; // Emit new burst when this many particles remain
+    this.emissionInterval = 100; // Much more frequent emission for painting
+    this.burstSize = 3; // Fewer particles per burst for smoother painting
+    this.minParticlesForNewBurst = 1; // Emit more frequently
 
     // Pre-create particle pool
     for (let i = 0; i < maxParticles; i++) {
@@ -184,9 +185,9 @@ class ParticleEmitter {
         particle.init(
           x,
           y,
-          (Math.random() - 0.5) * 2, // Slightly stronger initial velocity for burst effect
-          (Math.random() - 0.5) * 2,
-          4 + Math.random() * 6
+          (Math.random() - 0.5) * 1, // Gentler initial velocity for painting
+          (Math.random() - 0.5) * 1,
+          this.baseSize + Math.random() * this.baseSize * 0.5 // Configurable particle size
         );
 
         if (!this.particles.includes(particle)) {
@@ -240,9 +241,11 @@ class ParticleEmitter {
 class ParticleSystem {
   constructor() {
     this.emitters = [];
-    this.maxEmitters = 17; // One per keypoint
+    this.maxEmitters = 3; // One for each painting keypoint (nose, leftWrist, rightWrist)
     this.initialized = false;
     this.keypointColors = [];
+    this.particleCount = 100; // Current max particles per emitter
+    this.particleSize = 3; // Current base particle size
   }
 
   initialize() {
@@ -251,25 +254,41 @@ class ParticleSystem {
     this.emitters = [];
     this.keypointColors = [];
 
-    // Create emitters for each keypoint with optimized settings
+    // Create emitters for painting keypoints with distinct colors
+    const paintingColors = [
+      hsv2rgb(0, 0.9, 1.0), // Red for nose
+      hsv2rgb(120, 0.9, 1.0), // Green for left wrist
+      hsv2rgb(240, 0.9, 1.0), // Blue for right wrist
+    ];
+
     for (let i = 0; i < this.maxEmitters; i++) {
-      const hue = (i * 20) % 360;
-      const color = hsv2rgb(hue, 0.9, 1.0); // More saturated colors
+      const color = paintingColors[i];
       this.keypointColors.push(color);
-      this.emitters.push(new ParticleEmitter(color, 20)); // Reduced max particles per emitter
+      const emitter = new ParticleEmitter(color, this.particleCount);
+      emitter.baseSize = this.particleSize;
+      this.emitters.push(emitter);
     }
 
     this.initialized = true;
   }
 
-  emitFromPose(pose, minConfidence = 0.1) {
+  emitFromPose(pose, connections, minConfidence = 0.1) {
     if (!this.initialized) this.initialize();
 
-    for (let j = 0; j < Math.min(pose.keypoints.length, this.emitters.length); j++) {
-      const keypoint = pose.keypoints[j];
-      if (keypoint.confidence > minConfidence) {
-        const intensity = keypoint.confidence * 1.5; // Reduced intensity multiplier
-        this.emitters[j].emit(keypoint.x, keypoint.y, intensity);
+    // Define keypoints for painting effect: nose (0), leftWrist (9), rightWrist (10)
+    const paintingKeypoints = [0, 9, 10]; // nose, leftWrist, rightWrist
+
+    for (let i = 0; i < paintingKeypoints.length; i++) {
+      const keypointIndex = paintingKeypoints[i];
+      const keypoint = pose.keypoints[keypointIndex];
+
+      if (keypoint && keypoint.confidence > minConfidence) {
+        // Use different emitters for different keypoints
+        const emitterIndex = i % this.emitters.length;
+        const intensity = keypoint.confidence * 1.2;
+
+        // Emit more frequently for continuous painting effect
+        this.emitters[emitterIndex].emit(keypoint.x, keypoint.y, intensity);
       }
     }
   }
@@ -328,6 +347,33 @@ class ParticleSystem {
 
     for (let emitter of this.emitters) {
       emitter.setBurstParameters(interval, burstSize, minParticles);
+    }
+  }
+
+  // Set painting intensity (emission frequency for painting effect)
+  setPaintingIntensity(intensity) {
+    for (let emitter of this.emitters) {
+      emitter.emissionInterval = intensity;
+    }
+  }
+
+  // Set particle count (max particles per emitter)
+  setParticleCount(count) {
+    this.particleCount = count;
+    // Reinitialize emitters with new particle count
+    if (this.initialized) {
+      this.initialize();
+    }
+  }
+
+  // Set particle size (base size for new particles)
+  setParticleSize(size) {
+    this.particleSize = size;
+    // Update all emitters with new base size
+    if (this.initialized) {
+      for (let emitter of this.emitters) {
+        emitter.baseSize = size;
+      }
     }
   }
 }
