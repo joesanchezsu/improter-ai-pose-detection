@@ -29,11 +29,102 @@
             margin-bottom: 20px;
             box-shadow: 0 2px 4px rgba(0,0,0,0.1);
         }
-        #sketch-container {
+        .controls {
+            margin: 20px 0;
+            display: flex;
+            gap: 10px;
+            justify-content: center;
+            flex-wrap: wrap;
+        }
+        
+        .btn {
+            padding: 10px 20px;
+            border: none;
+            border-radius: 5px;
+            cursor: pointer;
+            font-size: 14px;
+            font-weight: bold;
+            transition: all 0.3s ease;
+        }
+        
+        .btn-primary {
+            background-color: #007bff;
+            color: white;
+        }
+        
+        .btn-primary:hover {
+            background-color: #0056b3;
+        }
+        
+        .btn-secondary {
+            background-color: #6c757d;
+            color: white;
+        }
+        
+        .btn-secondary:hover {
+            background-color: #545b62;
+        }
+        
+        .canvas-container {
+            display: flex;
+            flex-direction: column;
+            gap: 20px;
+            justify-content: center;
+            margin: 20px 0;
+        }
+        
+        .canvas-wrapper {
+            text-align: center;
+        }
+        
+        .canvas-wrapper h3 {
+            margin: 0 0 10px 0;
+            color: #333;
+            font-size: 16px;
+        }
+        
+        #camera-container, #visualization-container {
             display: inline-block;
             border: 2px solid #333;
             border-radius: 8px;
             overflow: hidden;
+            background-color: #000;
+        }
+        
+        .visualization-controls {
+            background-color: white;
+            padding: 20px;
+            border-radius: 8px;
+            margin: 20px 0;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+            display: flex;
+            gap: 20px;
+            justify-content: center;
+            flex-wrap: wrap;
+        }
+        
+        .control-group {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            gap: 5px;
+        }
+        
+        .control-group label {
+            font-weight: bold;
+            color: #333;
+            font-size: 12px;
+        }
+        
+        .control-group input, .control-group select {
+            padding: 5px;
+            border: 1px solid #ddd;
+            border-radius: 3px;
+        }
+        
+        .control-group span {
+            font-size: 12px;
+            color: #666;
         }
     </style>
 </head>
@@ -45,7 +136,52 @@
             <p>This project uses p5.js and ml5.js to detect human poses from your webcam and draw skeleton connections in real-time.</p>
             <p><em>Make sure to allow camera access when prompted!</em></p>
         </div>
-        <div id="sketch-container"></div>
+        
+        <!-- Camera Controls -->
+        <div class="controls">
+            <button id="camera-toggle" class="btn btn-primary">🎥 Start Camera</button>
+            <button id="save-canvas" class="btn btn-secondary">💾 Save Art</button>
+        </div>
+        
+        <!-- Canvas Container -->
+        <div class="canvas-container">
+            <div class="canvas-wrapper">
+                <h3>📹 Camera Feed</h3>
+                <div id="camera-container"></div>
+            </div>
+        </div>
+        
+        <!-- Visualization Controls -->
+        <div class="visualization-controls">
+            <div class="control-group">
+                <label for="paint-mode">Paint Mode:</label>
+                <select id="paint-mode">
+                    <option value="keypoints">Keypoints Only</option>
+                    <option value="skeleton">Skeleton Lines</option>
+                    <option value="trails">Pose Trails</option>
+                    <option value="circles">Growing Circles</option>
+                </select>
+            </div>
+            <div class="control-group">
+                <label for="paint-color">Color:</label>
+                <input type="color" id="paint-color" value="#ff0000">
+            </div>
+            <div class="control-group">
+                <label for="paint-size">Size:</label>
+                <input type="range" id="paint-size" min="1" max="50" value="10">
+                <span id="size-value">10</span>
+            </div>
+            <div class="control-group">
+                <label for="opacity">Paint Opacity:</label>
+                <input type="range" id="opacity" min="10" max="100" value="80">
+                <span id="opacity-value">80%</span>
+            </div>
+            <div class="control-group">
+                <label for="camera-opacity">Camera Opacity:</label>
+                <input type="range" id="camera-opacity" min="0" max="100" value="100">
+                <span id="camera-opacity-value">100%</span>
+            </div>
+        </div>
     </div>
     
     <script src="sketch.js"></script>
