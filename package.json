@@ -1,0 +1,31 @@
+{
+  "name": "improter-ai-pose-detection",
+  "version": "1.0.0",
+  "description": "A p5.js project with ml5.js for real-time pose detection and skeleton visualization",
+  "main": "index.html",
+  "scripts": {
+    "start": "npx http-server -p 8080 -c-1",
+    "dev": "npx http-server -p 8080 -c-1 -o",
+    "build": "echo 'No build step required for static files'",
+    "serve": "npx http-server -p 8080"
+  },
+  "keywords": [
+    "p5.js",
+    "ml5.js",
+    "pose-detection",
+    "computer-vision",
+    "machine-learning",
+    "webcam",
+    "skeleton-tracking"
+  ],
+  "author": "Your Name",
+  "license": "MIT",
+  "devDependencies": {
+    "http-server": "^14.1.1"
+  },
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/yourusername/improter-ai-pose-detection.git"
+  },
+  "homepage": "https://github.com/yourusername/improter-ai-pose-detection#readme"
+}

@@ -1,0 +1,53 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>ImproterAI - Pose Detection with p5.js & ml5.js</title>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/p5.js/1.9.4/p5.min.js"></script>
+    <script src="https://unpkg.com/ml5@1/dist/ml5.min.js"></script>
+    <style>
+        body {
+            margin: 0;
+            padding: 20px;
+            font-family: Arial, sans-serif;
+            background-color: #f0f0f0;
+        }
+        .container {
+            max-width: 800px;
+            margin: 0 auto;
+            text-align: center;
+        }
+        h1 {
+            color: #333;
+            margin-bottom: 20px;
+        }
+        .info {
+            background-color: white;
+            padding: 15px;
+            border-radius: 8px;
+            margin-bottom: 20px;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+        }
+        #sketch-container {
+            display: inline-block;
+            border: 2px solid #333;
+            border-radius: 8px;
+            overflow: hidden;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>🎯 ImproterAI Pose Detection</h1>
+        <div class="info">
+            <p><strong>Real-time pose detection and skeleton visualization</strong></p>
+            <p>This project uses p5.js and ml5.js to detect human poses from your webcam and draw skeleton connections in real-time.</p>
+            <p><em>Make sure to allow camera access when prompted!</em></p>
+        </div>
+        <div id="sketch-container"></div>
+    </div>
+    
+    <script src="sketch.js"></script>
+</body>
+</html>
