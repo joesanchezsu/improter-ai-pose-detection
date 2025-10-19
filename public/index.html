@@ -95,7 +95,7 @@
         }
         
         .visualization-controls {
-            background-color: white;
+            background-color: black;
             padding: 20px;
             border-radius: 8px;
             margin: 20px 0;
@@ -259,6 +259,11 @@
                 <label for="camera-opacity">Camera Opacity:</label>
                 <input type="range" id="camera-opacity" min="0" max="100" value="100">
                 <span id="camera-opacity-value">100%</span>
+            </div>
+            <div class="control-group">
+                <label for="camera-mirror">Mirror Camera:</label>
+                <input type="checkbox" id="camera-mirror" checked>
+                <span id="camera-mirror-value">On</span>
             </div>
             <div class="control-group" id="noise-controls" style="display: none;">
                 <label for="noise-strength">Noise Strength:</label>

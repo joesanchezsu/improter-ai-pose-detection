@@ -31,6 +31,7 @@ let poseVisualizer;
 let particleSystem;
 let smokeSystem;
 let cameraOpacity = 100; // New variable to control camera visibility
+let cameraMirror = true; // Variable to control camera mirroring
 
 // Configuration for the pose detection model
 const poseConfig = {
@@ -85,6 +86,9 @@ function setup() {
   particleSystem = new ParticleSystem();
   smokeSystem = new SmokeSystem();
 
+  // Set initial frame rate
+  frameRate(60);
+
   // console.log("ImproterAI Pose Detection initialized");
   // console.log("Skeleton connections:", connections);
 }
@@ -100,10 +104,19 @@ function draw() {
     scaleY = height / video.height;
 
     // Draw the webcam video with opacity control
+    push(); // Isolate drawing state for camera
     tint(255, cameraOpacity);
+
+    if (cameraMirror) {
+      // Mirror the camera horizontally
+      translate(width, 0);
+      scale(-1, 1);
+    }
+
     // Draw video at full canvas size (no cropping)
     image(video, 0, 0, width, height);
-    noTint(); // Reset tint for other drawings
+
+    pop(); // Restore drawing state
 
     // Draw the skeleton connections
     // drawSkeleton();
@@ -148,8 +161,20 @@ function drawSkeleton() {
       ) {
         stroke(visualSettings.skeletonColor);
         strokeWeight(visualSettings.strokeWeight);
-        // Scale coordinates to match canvas size
-        line(pointA.x * scaleX, pointA.y * scaleY, pointB.x * scaleX, pointB.y * scaleY);
+
+        // Calculate coordinates with mirroring
+        let x1 = pointA.x * scaleX;
+        let y1 = pointA.y * scaleY;
+        let x2 = pointB.x * scaleX;
+        let y2 = pointB.y * scaleY;
+
+        // Flip X coordinates if camera is mirrored
+        if (cameraMirror) {
+          x1 = width - x1;
+          x2 = width - x2;
+        }
+
+        line(x1, y1, x2, y2);
       }
     }
   }
@@ -165,8 +190,17 @@ function drawKeypoints() {
       if (keypoint.confidence > visualSettings.minConfidence) {
         fill(visualSettings.keypointColor);
         noStroke();
-        // Scale coordinates to match canvas size
-        circle(keypoint.x * scaleX, keypoint.y * scaleY, visualSettings.keypointSize);
+
+        // Calculate coordinates with mirroring
+        let x = keypoint.x * scaleX;
+        let y = keypoint.y * scaleY;
+
+        // Flip X coordinate if camera is mirrored
+        if (cameraMirror) {
+          x = width - x;
+        }
+
+        circle(x, y, visualSettings.keypointSize);
       }
     }
   }
@@ -341,6 +375,14 @@ function setupUI() {
     cameraOpacityValue.textContent = cameraOpacity + "%";
   });
 
+  // Camera mirror checkbox
+  const cameraMirrorCheckbox = document.getElementById("camera-mirror");
+  const cameraMirrorValue = document.getElementById("camera-mirror-value");
+  cameraMirrorCheckbox.addEventListener("change", (e) => {
+    cameraMirror = e.target.checked;
+    cameraMirrorValue.textContent = cameraMirror ? "On" : "Off";
+  });
+
   // Noise strength slider
   const noiseStrengthSlider = document.getElementById("noise-strength");
   const noiseStrengthValue = document.getElementById("noise-strength-value");
@@ -474,6 +516,9 @@ function toggleFullscreen() {
       }
 
       resizeCanvas(canvasWidth, canvasHeight);
+
+      // Set frame rate to 30 FPS for fullscreen performance
+      frameRate(30);
     }, 100);
   } else {
     // Exit fullscreen
@@ -493,6 +538,9 @@ function toggleFullscreen() {
 
     // Resize canvas back to normal
     resizeCanvas(640, 480);
+
+    // Reset frame rate to 60 FPS for normal mode
+    frameRate(60);
   }
 }
 
@@ -535,6 +583,9 @@ function handleFullscreenChange() {
     button.classList.add("btn-secondary");
 
     resizeCanvas(640, 480);
+
+    // Reset frame rate to 60 FPS when exiting fullscreen
+    frameRate(60);
   }
 }
 
@@ -547,11 +598,21 @@ function paintOnCanvas() {
     for (let pose of poses) {
       // Create a scaled copy of the pose for particles
       let scaledPose = {
-        keypoints: pose.keypoints.map((keypoint) => ({
-          x: keypoint.x * scaleX,
-          y: keypoint.y * scaleY,
-          confidence: keypoint.confidence,
-        })),
+        keypoints: pose.keypoints.map((keypoint) => {
+          let x = keypoint.x * scaleX;
+          let y = keypoint.y * scaleY;
+
+          // Flip X coordinate if camera is mirrored
+          if (cameraMirror) {
+            x = width - x;
+          }
+
+          return {
+            x: x,
+            y: y,
+            confidence: keypoint.confidence,
+          };
+        }),
       };
       particleSystem.emitFromPose(scaledPose, connections, visualSettings.minConfidence);
     }
@@ -559,22 +620,42 @@ function paintOnCanvas() {
     for (let pose of poses) {
       // Create a scaled copy of the pose for smoke
       let scaledPose = {
-        keypoints: pose.keypoints.map((keypoint) => ({
-          x: keypoint.x * scaleX,
-          y: keypoint.y * scaleY,
-          confidence: keypoint.confidence,
-        })),
+        keypoints: pose.keypoints.map((keypoint) => {
+          let x = keypoint.x * scaleX;
+          let y = keypoint.y * scaleY;
+
+          // Flip X coordinate if camera is mirrored
+          if (cameraMirror) {
+            x = width - x;
+          }
+
+          return {
+            x: x,
+            y: y,
+            confidence: keypoint.confidence,
+          };
+        }),
       };
       smokeSystem.emitFromPose(scaledPose, visualSettings.minConfidence);
     }
   } else {
     // Use the pose visualizer for other modes with scaled poses
     let scaledPoses = poses.map((pose) => ({
-      keypoints: pose.keypoints.map((keypoint) => ({
-        x: keypoint.x * scaleX,
-        y: keypoint.y * scaleY,
-        confidence: keypoint.confidence,
-      })),
+      keypoints: pose.keypoints.map((keypoint) => {
+        let x = keypoint.x * scaleX;
+        let y = keypoint.y * scaleY;
+
+        // Flip X coordinate if camera is mirrored
+        if (cameraMirror) {
+          x = width - x;
+        }
+
+        return {
+          x: x,
+          y: y,
+          confidence: keypoint.confidence,
+        };
+      }),
     }));
     poseVisualizer.visualize(scaledPoses, connections, visualSettings.minConfidence);
   }
