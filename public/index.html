@@ -202,6 +202,72 @@
             .fullscreen-mode h1 {
                 display: none;
             }
+            
+            /* Presentation mode styles */
+            .presentation-mode {
+                position: fixed;
+                top: 0;
+                left: 0;
+                width: 100vw;
+                height: 100vh;
+                background: #000;
+                z-index: 9999;
+                display: flex;
+                flex-direction: column;
+                align-items: center;
+                justify-content: center;
+            }
+            
+            .presentation-mode .container {
+                max-width: none !important;
+                width: 100vw !important;
+                height: 100vh !important;
+                margin: 0 !important;
+                padding: 0 !important;
+                border-radius: 0;
+                box-shadow: none;
+                background: #000;
+            }
+            
+            .presentation-mode .canvas-container {
+                flex: 1;
+                display: flex;
+                align-items: center;
+                justify-content: center;
+                margin: 0;
+                width: 100%;
+                height: 100%;
+            }
+            
+            .presentation-mode #camera-container {
+                border: none;
+                border-radius: 0;
+                width: 100%;
+                height: 100%;
+                display: flex;
+                align-items: center;
+                justify-content: center;
+            }
+            
+            .presentation-mode .controls {
+                display: none;
+            }
+            
+            .presentation-mode .visualization-controls {
+                display: none;
+            }
+            
+            .presentation-mode .info {
+                display: none;
+            }
+            
+            .presentation-mode h1 {
+                display: none;
+            }
+            
+            .presentation-mode h3 {
+                display: none;
+            }
     </style>
 </head>
 <body>
@@ -213,12 +279,13 @@
             <p><em>Make sure to allow camera access when prompted!</em></p>
         </div>
         
-            <!-- Camera Controls -->
-            <div class="controls">
-                <button id="camera-toggle" class="btn btn-primary">🎥 Start Camera</button>
-                <button id="fullscreen-toggle" class="btn btn-secondary">🖥️ Fullscreen</button>
-                <button id="save-canvas" class="btn btn-secondary">💾 Save Art</button>
-            </div>
+                <!-- Camera Controls -->
+                <div class="controls">
+                    <button id="camera-toggle" class="btn btn-primary">🎥 Start Camera</button>
+                    <button id="fullscreen-toggle" class="btn btn-secondary">🖥️ Fullscreen</button>
+                    <button id="presentation-toggle" class="btn btn-secondary">🎭 Presentation Mode</button>
+                    <button id="save-canvas" class="btn btn-secondary">💾 Save Art</button>
+                </div>
         
         <!-- Canvas Container -->
         <div class="canvas-container">

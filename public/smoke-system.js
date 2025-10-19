@@ -34,10 +34,8 @@ class SmokeParticle {
     this.show();
   }
 
-  // Draw the particle using texture (optimized like reference code)
+  // Draw the particle with glowing effect
   show() {
-    push(); // Isolate drawing state
-
     // Calculate color based on lifespan (start yellow, become orange/red)
     const lifeRatio = this.lifespan / this.maxLifespan;
     // Start from index 2 (yellow) and go backwards to 0 (orange-red) as particle ages
@@ -48,10 +46,47 @@ class SmokeParticle {
     const sizeMultiplier = 0.4 + lifeRatio * 1.2; // Start at 0.4x, grow to 1.6x max
     const currentSize = Math.min(this.baseSize * sizeMultiplier, 60); // Cap at 60px for fullscreen
 
-    // Use simple circles for better performance
-    fill(currentColor[0], currentColor[1], currentColor[2], this.lifespan);
-    noStroke();
-    circle(this.position.x, this.position.y, currentSize);
+    // Draw glowing circle with radial gradient
+    this.drawGlowingSmoke(
+      this.position.x,
+      this.position.y,
+      currentSize,
+      currentColor,
+      this.lifespan
+    );
+  }
+
+  // Draw a glowing smoke particle with radial gradient effect
+  drawGlowingSmoke(x, y, size, colorArray, opacity) {
+    const ctx = drawingContext; // Access the 2D drawing context from p5.js
+    push();
+    blendMode(ADD); // Makes light/glow additive for fire-like effect
+
+    const r = colorArray[0];
+    const g = colorArray[1];
+    const b = colorArray[2];
+    const a = opacity; // Use the lifespan as opacity
+
+    // Create a radial gradient for glowing effect
+    const grd = ctx.createRadialGradient(
+      x,
+      y,
+      0, // Center of gradient
+      x,
+      y,
+      size * 0.8 // Outer edge of gradient
+    );
+
+    // Add color stops: bright center fading to transparent edge
+    grd.addColorStop(0, `rgba(${r},${g},${b},${(a / 255).toFixed(3)})`);
+    grd.addColorStop(0.6, `rgba(${r},${g},${b},${((a / 255) * 0.6).toFixed(3)})`);
+    grd.addColorStop(1, `rgba(${r},${g},${b},0)`);
+
+    // Draw the glowing circle
+    ctx.fillStyle = grd;
+    ctx.beginPath();
+    ctx.arc(x, y, size * 0.8, 0, Math.PI * 2);
+    ctx.fill();
 
     pop(); // Restore previous drawing state
   }

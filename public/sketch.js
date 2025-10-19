@@ -21,6 +21,7 @@ let cameraCanvas;
 let isCameraActive = false;
 let previousPoses = [];
 let isFullscreen = false;
+let isPresentationMode = false;
 let scaleX = 1;
 let scaleY = 1;
 let offsetX = 0;
@@ -124,14 +125,21 @@ function draw() {
     // Draw all the tracked landmark points
     // drawKeypoints();
 
-    // Display pose count
-    displayPoseInfo();
+    // Display pose count (hidden in presentation mode)
+    if (!isPresentationMode) {
+      displayPoseInfo();
+    }
 
     // Paint visualizations on the same canvas
     paintOnCanvas();
 
     // Update and draw particles
     updateParticles();
+
+    // Handle presentation mode automatic switching
+    if (isPresentationMode) {
+      handlePresentationMode();
+    }
   } else {
     // Show "Camera Stopped" message
     fill(255);
@@ -285,11 +293,19 @@ function setupUI() {
   const fullscreenToggle = document.getElementById("fullscreen-toggle");
   fullscreenToggle.addEventListener("click", toggleFullscreen);
 
-  // Keyboard support for fullscreen
+  // Presentation mode toggle button
+  const presentationToggle = document.getElementById("presentation-toggle");
+  presentationToggle.addEventListener("click", togglePresentationMode);
+
+  // Keyboard support for fullscreen and presentation mode
   document.addEventListener("keydown", (e) => {
-    if (e.key === "F11" || (e.key === "Escape" && isFullscreen)) {
+    if (e.key === "F11" || (e.key === "Escape" && (isFullscreen || isPresentationMode))) {
       e.preventDefault();
-      toggleFullscreen();
+      if (isPresentationMode) {
+        togglePresentationMode();
+      } else {
+        toggleFullscreen();
+      }
     }
   });
 
@@ -544,6 +560,124 @@ function toggleFullscreen() {
   }
 }
 
+// Toggle presentation mode
+function togglePresentationMode() {
+  const button = document.getElementById("presentation-toggle");
+  const container = document.querySelector(".container");
+
+  if (!isPresentationMode) {
+    // Enter presentation mode - use native fullscreen API
+    if (container.requestFullscreen) {
+      container.requestFullscreen();
+    } else if (container.webkitRequestFullscreen) {
+      container.webkitRequestFullscreen();
+    } else if (container.msRequestFullscreen) {
+      container.msRequestFullscreen();
+    }
+
+    container.classList.add("presentation-mode");
+    isPresentationMode = true;
+    button.textContent = "🎭 Exit Presentation";
+    button.classList.remove("btn-secondary");
+    button.classList.add("btn-primary");
+
+    // Set frame rate for presentation
+    frameRate(30);
+
+    // Set optimal opacity values for presentation
+    cameraOpacity = 25; // 25% camera opacity
+    poseVisualizer.setOpacity(90); // 90% paint opacity
+
+    // Update UI sliders to reflect the changes
+    const cameraOpacitySlider = document.getElementById("camera-opacity");
+    const paintOpacitySlider = document.getElementById("opacity");
+    const cameraOpacityValue = document.getElementById("camera-opacity-value");
+    const paintOpacityValue = document.getElementById("opacity-value");
+
+    if (cameraOpacitySlider) cameraOpacitySlider.value = 25;
+    if (paintOpacitySlider) paintOpacitySlider.value = 90;
+    if (cameraOpacityValue) cameraOpacityValue.textContent = "25%";
+    if (paintOpacityValue) paintOpacityValue.textContent = "90%";
+
+    // Calculate fullscreen canvas size maintaining aspect ratio
+    setTimeout(() => {
+      const aspectRatio = 640 / 480; // 4:3 aspect ratio
+      let canvasWidth, canvasHeight;
+
+      if (window.innerWidth / window.innerHeight > aspectRatio) {
+        // Screen is wider than video aspect ratio
+        canvasHeight = window.innerHeight;
+        canvasWidth = canvasHeight * aspectRatio;
+      } else {
+        // Screen is taller than video aspect ratio
+        canvasWidth = window.innerWidth;
+        canvasHeight = canvasWidth / aspectRatio;
+      }
+
+      resizeCanvas(canvasWidth, canvasHeight);
+    }, 100);
+  } else {
+    // Exit presentation mode
+    if (document.exitFullscreen) {
+      document.exitFullscreen();
+    } else if (document.webkitExitFullscreen) {
+      document.webkitExitFullscreen();
+    } else if (document.msExitFullscreen) {
+      document.msExitFullscreen();
+    }
+
+    container.classList.remove("presentation-mode");
+    isPresentationMode = false;
+    button.textContent = "🎭 Presentation Mode";
+    button.classList.remove("btn-primary");
+    button.classList.add("btn-secondary");
+
+    // Reset frame rate
+    frameRate(60);
+
+    // Reset opacity values to defaults
+    cameraOpacity = 100; // Reset to 100% camera opacity
+    poseVisualizer.setOpacity(80); // Reset to 80% paint opacity
+
+    // Update UI sliders to reflect the changes
+    const cameraOpacitySlider = document.getElementById("camera-opacity");
+    const paintOpacitySlider = document.getElementById("opacity");
+    const cameraOpacityValue = document.getElementById("camera-opacity-value");
+    const paintOpacityValue = document.getElementById("opacity-value");
+
+    if (cameraOpacitySlider) cameraOpacitySlider.value = 100;
+    if (paintOpacitySlider) paintOpacitySlider.value = 80;
+    if (cameraOpacityValue) cameraOpacityValue.textContent = "100%";
+    if (paintOpacityValue) paintOpacityValue.textContent = "80%";
+
+    // Resize canvas back to normal
+    resizeCanvas(640, 480);
+  }
+}
+
+// Handle presentation mode automatic switching
+function handlePresentationMode() {
+  const personCount = poses.length;
+
+  if (personCount === 1) {
+    // One person - use smoke system
+    if (poseVisualizer.paintMode !== "smoke") {
+      poseVisualizer.setMode("smoke");
+      // Update the UI selector to reflect the change
+      const paintModeSelect = document.getElementById("paint-mode");
+      paintModeSelect.value = "smoke";
+    }
+  } else if (personCount > 1) {
+    // Multiple people - use growing circles
+    if (poseVisualizer.paintMode !== "circles") {
+      poseVisualizer.setMode("circles");
+      // Update the UI selector to reflect the change
+      const paintModeSelect = document.getElementById("paint-mode");
+      paintModeSelect.value = "circles";
+    }
+  }
+}
+
 // Handle window resize
 function windowResized() {
   if (isFullscreen) {
@@ -571,16 +705,42 @@ function handleFullscreenChange() {
     document.msFullscreenElement
   );
 
-  if (!isCurrentlyFullscreen && isFullscreen) {
+  if (!isCurrentlyFullscreen && (isFullscreen || isPresentationMode)) {
     // User exited fullscreen using browser controls
-    const button = document.getElementById("fullscreen-toggle");
+    const fullscreenButton = document.getElementById("fullscreen-toggle");
+    const presentationButton = document.getElementById("presentation-toggle");
     const container = document.querySelector(".container");
 
-    container.classList.remove("fullscreen-mode");
-    isFullscreen = false;
-    button.textContent = "🖥️ Fullscreen";
-    button.classList.remove("btn-primary");
-    button.classList.add("btn-secondary");
+    if (isFullscreen) {
+      container.classList.remove("fullscreen-mode");
+      isFullscreen = false;
+      fullscreenButton.textContent = "🖥️ Fullscreen";
+      fullscreenButton.classList.remove("btn-primary");
+      fullscreenButton.classList.add("btn-secondary");
+    }
+
+    if (isPresentationMode) {
+      container.classList.remove("presentation-mode");
+      isPresentationMode = false;
+      presentationButton.textContent = "🎭 Presentation Mode";
+      presentationButton.classList.remove("btn-primary");
+      presentationButton.classList.add("btn-secondary");
+
+      // Reset opacity values to defaults
+      cameraOpacity = 100; // Reset to 100% camera opacity
+      poseVisualizer.setOpacity(80); // Reset to 80% paint opacity
+
+      // Update UI sliders to reflect the changes
+      const cameraOpacitySlider = document.getElementById("camera-opacity");
+      const paintOpacitySlider = document.getElementById("opacity");
+      const cameraOpacityValue = document.getElementById("camera-opacity-value");
+      const paintOpacityValue = document.getElementById("opacity-value");
+
+      if (cameraOpacitySlider) cameraOpacitySlider.value = 100;
+      if (paintOpacitySlider) paintOpacitySlider.value = 80;
+      if (cameraOpacityValue) cameraOpacityValue.textContent = "100%";
+      if (paintOpacityValue) paintOpacityValue.textContent = "80%";
+    }
 
     resizeCanvas(640, 480);
 
@@ -667,6 +827,7 @@ function paintOnCanvas() {
 function clearVisualizationCanvas() {
   background(0);
   poseVisualizer.clearTrails();
+  poseVisualizer.clearPoseTracking();
   particleSystem.clear();
   smokeSystem.clear();
 }
