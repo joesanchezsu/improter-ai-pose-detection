@@ -25,6 +25,14 @@ class PoseVisualizer {
     this.poseLastPositions = []; // Track last positions for movement detection
     this.poseMovementThreshold = 15; // Movement threshold for color changes
     this.poseStillnessTime = []; // Track stillness time for each pose
+
+    // Hands up detection for growing circles
+    this.handsUpGrowth = 0; // Growth multiplier when hands are up
+    this.maxGrowthMultiplier = 3.0; // Maximum growth when all hands are up
+    this.growthSpeed = 0.02; // How fast circles grow when hands are up
+    this.allHandsUpTime = 0; // Time all hands have been up
+    this.handsUpThreshold = 48; // 2 seconds of all hands up to trigger fireworks
+    this.triggerFireworksMode = false; // Signal to switch to fireworks mode
   }
 
   setMode(mode) {
@@ -57,6 +65,17 @@ class PoseVisualizer {
 
   visualize(poses, connections, minConfidence = 0.1) {
     if (poses.length === 0) return;
+
+    // Handle mode switching logic for growing circles
+    // if (this.paintMode === "circles") {
+    //   // Check if all hands are up to trigger fireworks mode
+    //   if (this.checkAllHandsUp(poses, minConfidence)) {
+    //     console.log("All hands up, switching to fireworks mode");
+    //     // Signal to switch to fireworks mode (particles)
+    //     // this.triggerFireworksMode = true;
+    //     return;
+    //   }
+    // }
 
     for (let i = 0; i < poses.length; i++) {
       const pose = poses[i];
@@ -152,7 +171,13 @@ class PoseVisualizer {
     // Track movement for color changes
     this.updateMovementTracking(pose, poseIndex, minConfidence);
 
+    // Check if hands are up for this pose
+    const handsUp = this.checkHandsUp(pose, minConfidence);
+
     for (let j = 0; j < pose.keypoints.length; j++) {
+      // Skip ears keypoints (indices 3 and 4)
+      if (j === 3 || j === 4) continue;
+
       const keypoint = pose.keypoints[j];
       if (keypoint.confidence > minConfidence) {
         // Initialize color for this keypoint if not set
@@ -162,12 +187,22 @@ class PoseVisualizer {
 
         const time = millis() * 0.001;
 
-        // Wave-like size changes (bigger base size: 80)
+        // Wave-like size changes (bigger base size: 90)
         const baseSize = 90;
-        const sizeWave = sin(time * 2 + j * 0.5) * 30; // Wave amplitude of 20
-        const size = baseSize + sizeWave;
+        const sizeWave = sin(time * 2 + j * 0.5) * 30; // Wave amplitude of 30
+        let size = baseSize + sizeWave;
 
-        // Wave-like opacity changes with minimum opacity of 0.7
+        // Apply hands-up growth
+        if (handsUp) {
+          this.handsUpGrowth += this.growthSpeed;
+          this.handsUpGrowth = Math.min(this.handsUpGrowth, this.maxGrowthMultiplier);
+          size *= 1 + this.handsUpGrowth;
+        } else {
+          // Gradually reduce growth when hands come down
+          this.handsUpGrowth *= 0.95;
+        }
+
+        // Wave-like opacity changes with minimum opacity of 0.9
         const opacityWave = sin(time * 1.5 + j * 0.3) * 0.2; // Wave amplitude of 20%
         const minOpacity = 0.9; // Minimum opacity of 90%
         const dynamicOpacity = Math.max(
@@ -190,6 +225,62 @@ class PoseVisualizer {
   // Get a random color from the palette
   getRandomColor() {
     return this.colorPalette[Math.floor(Math.random() * this.colorPalette.length)];
+  }
+
+  // Check if hands are up (above the head/nose)
+  checkHandsUp(pose, minConfidence) {
+    const nose = pose.keypoints[0]; // nose
+    const leftWrist = pose.keypoints[9]; // leftWrist
+    const rightWrist = pose.keypoints[10]; // rightWrist
+
+    if (nose.confidence < minConfidence) return false;
+
+    let handsUpCount = 0;
+
+    // Check left wrist
+    if (leftWrist.confidence > minConfidence && leftWrist.y < nose.y) {
+      handsUpCount++;
+    }
+
+    // Check right wrist
+    if (rightWrist.confidence > minConfidence && rightWrist.y < nose.y) {
+      handsUpCount++;
+    }
+
+    // Return true if at least one hand is up
+    return handsUpCount > 0;
+  }
+
+  // Check if all people have hands up and handle mode switching
+  checkAllHandsUp(poses, minConfidence) {
+    if (poses.length === 0) return false;
+
+    let allHandsUp = true;
+    for (let pose of poses) {
+      if (!this.checkHandsUp(pose, minConfidence)) {
+        allHandsUp = false;
+        break;
+      }
+    }
+
+    if (allHandsUp) {
+      this.allHandsUpTime += 16; // Assuming ~60fps
+
+      // If all hands up for threshold time, trigger fireworks mode
+      if (this.allHandsUpTime >= this.handsUpThreshold) {
+        return true; // Signal to switch to fireworks mode
+      }
+    } else {
+      this.allHandsUpTime = 0; // Reset timer
+    }
+
+    return false;
+  }
+
+  // Reset hands up tracking
+  resetHandsUpTracking() {
+    this.handsUpGrowth = 0;
+    this.allHandsUpTime = 0;
   }
 
   // Draw a glowing circle with radial gradient effect

@@ -31,6 +31,7 @@ let offsetY = 0;
 let poseVisualizer;
 let particleSystem;
 let smokeSystem;
+let fireworksSystem;
 let cameraOpacity = 100; // New variable to control camera visibility
 let cameraMirror = true; // Variable to control camera mirroring
 
@@ -86,6 +87,7 @@ function setup() {
   poseVisualizer = new PoseVisualizer();
   particleSystem = new ParticleSystem();
   smokeSystem = new SmokeSystem();
+  fireworksSystem = new FireworksSystem();
 
   // Set initial frame rate
   frameRate(60);
@@ -130,16 +132,19 @@ function draw() {
       displayPoseInfo();
     }
 
+    // Handle presentation mode automatic switching
+    if (isPresentationMode) {
+      handlePresentationMode();
+    }
+
     // Paint visualizations on the same canvas
     paintOnCanvas();
 
     // Update and draw particles
     updateParticles();
 
-    // Handle presentation mode automatic switching
-    if (isPresentationMode) {
-      handlePresentationMode();
-    }
+    // Handle mode switching from growing circles to fireworks
+    handleModeSwitching();
   } else {
     // Show "Camera Stopped" message
     fill(255);
@@ -226,6 +231,9 @@ function displayPoseInfo() {
   if (poseVisualizer.paintMode === "particles") {
     const particleCount = particleSystem.getTotalParticles();
     text(`Particles: ${particleCount}`, 10, 45);
+  } else if (poseVisualizer.paintMode === "fireworks") {
+    const fireworksCount = fireworksSystem.fireworks.length;
+    text(`Fireworks: ${fireworksCount}`, 10, 45);
   } else if (poseVisualizer.paintMode === "smoke") {
     const smokeCount = smokeSystem.getTotalParticles();
     text(`Smoke: ${smokeCount}`, 10, 45);
@@ -314,6 +322,24 @@ function setupUI() {
   document.addEventListener("webkitfullscreenchange", handleFullscreenChange);
   document.addEventListener("mozfullscreenchange", handleFullscreenChange);
   document.addEventListener("MSFullscreenChange", handleFullscreenChange);
+
+  // Space bar to trigger fireworks mode (only when in circles mode)
+  document.addEventListener("keydown", (e) => {
+    if (e.code === "Space") {
+      e.preventDefault(); // prevent page scroll
+      console.log("Space pressed! Current mode:", poseVisualizer.paintMode);
+
+      // Only switch to fireworks if currently in circles mode
+      if (poseVisualizer.paintMode === "circles") {
+        poseVisualizer.setMode("fireworks");
+        fireworksSystem.setEnabled(true);
+        fireworksSystem.clear(); // clear old fireworks
+        console.log("Switched to fireworks mode");
+      } else {
+        console.log("Space bar ignored - not in circles mode");
+      }
+    }
+  });
 
   // Paint mode selector
   const paintModeSelect = document.getElementById("paint-mode");
@@ -659,22 +685,48 @@ function togglePresentationMode() {
 function handlePresentationMode() {
   const personCount = poses.length;
 
+  // Don't override fireworks mode - let it stay active
+  if (poseVisualizer.paintMode === "fireworks") {
+    return; // Keep fireworks mode active
+  }
+
   if (personCount === 1) {
     // One person - use smoke system
     if (poseVisualizer.paintMode !== "smoke") {
       poseVisualizer.setMode("smoke");
-      // Update the UI selector to reflect the change
-      const paintModeSelect = document.getElementById("paint-mode");
-      paintModeSelect.value = "smoke";
+      // Don't update UI selector in presentation mode
     }
   } else if (personCount > 1) {
     // Multiple people - use growing circles
     if (poseVisualizer.paintMode !== "circles") {
       poseVisualizer.setMode("circles");
-      // Update the UI selector to reflect the change
-      const paintModeSelect = document.getElementById("paint-mode");
-      paintModeSelect.value = "circles";
+      // Don't update UI selector in presentation mode
     }
+  }
+}
+
+// Handle mode switching from growing circles to fireworks
+function handleModeSwitching() {
+  // Only handle mode switching in presentation mode
+  if (!isPresentationMode) return;
+
+  // Check if growing circles mode wants to switch to fireworks
+  // if (poseVisualizer.triggerFireworksMode) {
+  //   // switch to dedicated fireworks mode (separate system)
+  //   poseVisualizer.setMode("fireworks");
+  //   fireworksSystem.setEnabled(true);
+  //   fireworksSystem.updateAndDraw();
+  //   poseVisualizer.resetHandsUpTracking();
+  //   // No UI change — fireworks is trigger-only
+  // }
+
+  // Check if we're in fireworks mode and should go back to smoke (only 1 person)
+  if (poseVisualizer.paintMode === "fireworks" && poses.length === 1) {
+    poseVisualizer.setMode("smoke");
+    fireworksSystem.setEnabled(false);
+    // poseVisualizer.triggerFireworksMode = false;
+    fireworksSystem.clear();
+    // No UI change in presentation mode
   }
 }
 
@@ -776,6 +828,27 @@ function paintOnCanvas() {
       };
       particleSystem.emitFromPose(scaledPose, connections, visualSettings.minConfidence);
     }
+  } else if (poseVisualizer.paintMode === "fireworks") {
+    // Fireworks mode: emit bursts and draw
+    for (let pose of poses) {
+      let scaledPose = {
+        keypoints: pose.keypoints.map((keypoint) => {
+          // Convert to WEBGL coordinates (centered coordinate system)
+          let x = keypoint.x * scaleX - width / 2;
+          let y = keypoint.y * scaleY - height / 2;
+
+          // Flip X coordinate if camera is mirrored
+          if (cameraMirror) {
+            x = -x;
+          }
+
+          return { x, y, confidence: keypoint.confidence };
+        }),
+      };
+
+      fireworksSystem.emitFromPose(scaledPose, visualSettings.minConfidence);
+    }
+    return; // Don't draw circles when in fireworks mode
   } else if (poseVisualizer.paintMode === "smoke") {
     for (let pose of poses) {
       // Create a scaled copy of the pose for smoke
@@ -830,6 +903,7 @@ function clearVisualizationCanvas() {
   poseVisualizer.clearPoseTracking();
   particleSystem.clear();
   smokeSystem.clear();
+  fireworksSystem.clear();
 }
 
 // Save visualization canvas
@@ -841,11 +915,13 @@ function saveVisualizationCanvas() {
 
 // Update all particle emitters
 function updateParticles() {
-  particleSystem.update();
-  particleSystem.draw();
-
-  // Update smoke system if in smoke mode
-  if (poseVisualizer.paintMode === "smoke") {
+  // Update per-mode systems exclusively
+  if (poseVisualizer.paintMode === "particles") {
+    particleSystem.update();
+    particleSystem.draw();
+  } else if (poseVisualizer.paintMode === "fireworks") {
+    fireworksSystem.updateAndDraw();
+  } else if (poseVisualizer.paintMode === "smoke") {
     // Apply wind force based on mouse position (like reference code)
     // Ensure we're using the correct canvas dimensions
     let canvasWidth = width;
