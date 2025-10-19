@@ -3,6 +3,113 @@
  * Handles different visualization modes for pose data
  */
 
+/* ---------------- Fireworks system (from colleague) ---------------- */
+
+class Spark {
+  constructor(x, y, angle, speed, colorHex) {
+    this.pos = createVector(x, y);
+    this.prev = this.pos.copy(); // for motion trail
+    this.vel = p5.Vector.fromAngle(angle).mult(speed);
+    this.life = 255;
+    this.decay = random(3, 6);
+    this.size = random(3.5, 7); // bigger core particles
+    this.color = this.hexToRgb(colorHex);
+  }
+
+  // Hex → RGB (keep minimal)
+  hexToRgb(hex) {
+    const m = /^#?([a-f\d]{2})([a-f\d]{2})([a-f\d]{2})$/i.exec(hex);
+    return m
+      ? { r: parseInt(m[1], 16), g: parseInt(m[2], 16), b: parseInt(m[3], 16) }
+      : { r: 255, g: 255, b: 255 };
+  }
+
+  update() {
+    // Save previous position for the trail
+    this.prev.set(this.pos);
+
+    // Slightly weaker air drag → wider spread
+    this.vel.mult(0.992);
+
+    // Gentle gravity → smoother downward fall
+    this.vel.y += 0.07;
+
+    // Tiny jitter adds sparkle realism
+    this.vel.x += random(-0.05, 0.05);
+    this.vel.y += random(-0.03, 0.03);
+
+    // Move and fade (slower fade = longer persistence)
+    this.pos.add(this.vel);
+    this.life -= this.decay * 0.7;
+  }
+
+  draw() {
+    // Soft flicker for a twinkling look
+    const flicker = 0.7 + 0.3 * sin(frameCount * 0.4 + this.pos.x * 0.02);
+
+    // 1) Draw a thicker trail between prev → current
+    stroke(this.color.r, this.color.g, this.color.b, this.life * 0.5 * flicker);
+    strokeWeight(this.size * 0.6); // wider trail "brush"
+    line(this.prev.x, this.prev.y, this.pos.x, this.pos.y);
+
+    // 2) Draw the core (larger & brighter)
+    noStroke();
+    const coreSize = this.size * 1.3;
+    fill(this.color.r, this.color.g, this.color.b, this.life * flicker);
+    circle(this.pos.x, this.pos.y, coreSize);
+  }
+
+  isDead() {
+    return this.life <= 0;
+  }
+}
+
+class Firework {
+  constructor(x, y, colorHex) {
+    this.sparks = [];
+    // Fewer sparks per burst → less noisy; looks full thanks to streaks
+    const n = 90;
+    for (let i = 0; i < n; i++) {
+      const ang = (TWO_PI * i) / n + random(-0.03, 0.03); // tighter spread
+      const sp = random(2.5, 6.5); // slightly slower
+      this.sparks.push(new Spark(x, y, ang, sp, colorHex));
+    }
+  }
+  update() {
+    for (const s of this.sparks) s.update();
+    this.sparks = this.sparks.filter((s) => !s.isDead());
+  }
+  draw() {
+    // Additive blending for glow
+    push();
+    blendMode(ADD);
+    for (const s of this.sparks) s.draw();
+    pop();
+  }
+  isDead() {
+    return this.sparks.length === 0;
+  }
+}
+
+class FireworksManager {
+  constructor() {
+    this.fireworks = [];
+  }
+  trigger(x, y, colorHex) {
+    this.fireworks.push(new Firework(x, y, colorHex));
+  }
+  updateAndDraw() {
+    for (const f of this.fireworks) {
+      f.update();
+      f.draw();
+    }
+    this.fireworks = this.fireworks.filter((f) => !f.isDead());
+  }
+  clear() {
+    this.fireworks = [];
+  }
+}
+
 // Base class for pose visualizations
 class PoseVisualizer {
   constructor() {
@@ -15,11 +122,12 @@ class PoseVisualizer {
     // Enhanced growing circles properties
 
     this.colorPalette = [
-      "#CFF8F4", // Bright cyan mint
-      "#5CD4E1", // Aqua-blue
-      "#B167E6", // Vibrant purple
-      "#7232A8", // Deep violet
-      "#2C133F", // Almost black purple
+      "#FF006E", // Electric Magenta
+      "#FFBE0B", // Bright Warm Yellow
+      "#3A86FF", // Electric Blue
+      "#8338EC", // Vivid Purple
+      "#FB5607", // Orange-Red
+      "#00F5D4", // Cyan-Green
     ];
     this.poseColors = []; // Store colors for each pose (array of colors per keypoint)
     this.poseLastPositions = []; // Track last positions for movement detection
@@ -30,6 +138,12 @@ class PoseVisualizer {
     this.handsUpGrowth = 0; // Growth multiplier when hands are up
     this.maxGrowthMultiplier = 3.0; // Maximum growth when all hands are up
     this.growthSpeed = 0.02; // How fast circles grow when hands are up
+
+    // Fireworks system (from colleague)
+    this.fireworks = new FireworksManager();
+    this.fireworksActiveUntil = 0; // Timestamp until which bursts keep firing
+    this.fireworksCooldown = 0; // Burst cooldown timestamp (ms)
+    this.fireworksInterval = 320; // Slower cadence for calmer rhythm
     this.allHandsUpTime = 0; // Time all hands have been up
     this.handsUpThreshold = 48; // 2 seconds of all hands up to trigger fireworks
     this.triggerFireworksMode = false; // Signal to switch to fireworks mode
@@ -64,18 +178,11 @@ class PoseVisualizer {
   }
 
   visualize(poses, connections, minConfidence = 0.1) {
-    if (poses.length === 0) return;
-
-    // Handle mode switching logic for growing circles
-    // if (this.paintMode === "circles") {
-    //   // Check if all hands are up to trigger fireworks mode
-    //   if (this.checkAllHandsUp(poses, minConfidence)) {
-    //     console.log("All hands up, switching to fireworks mode");
-    //     // Signal to switch to fireworks mode (particles)
-    //     // this.triggerFireworksMode = true;
-    //     return;
-    //   }
-    // }
+    if (poses.length === 0) {
+      // Still update/draw fireworks layer (lets remaining sparks fade out)
+      this.fireworks.updateAndDraw();
+      return;
+    }
 
     for (let i = 0; i < poses.length; i++) {
       const pose = poses[i];
@@ -93,8 +200,16 @@ class PoseVisualizer {
         case "circles":
           this.drawGrowingCircles(pose, minConfidence, i);
           break;
+        case "fireworks":
+          // Reuse glowing circles as a soft base under fireworks
+          this.drawGrowingCircles(pose, minConfidence, i);
+          // Trigger logic lives in updateMovementTracking()
+          break;
       }
     }
+
+    // Draw the fireworks overlay on top every frame
+    this.fireworks.updateAndDraw();
   }
 
   drawKeypoints(pose, minConfidence) {
@@ -322,60 +437,135 @@ class PoseVisualizer {
 
   // Track movement to determine if colors should change
   updateMovementTracking(pose, poseIndex, minConfidence) {
-    const currentTime = millis();
     let totalMovement = 0;
     let validKeypoints = 0;
 
-    // Calculate movement from key positions (head, shoulders, hips)
-    const trackingKeypoints = [0, 5, 6, 11, 12]; // nose, leftShoulder, rightShoulder, leftHip, rightHip
+    // Track core posture points (nose, shoulders, hips)
+    const trackingKeypoints = [0, 5, 6, 11, 12];
 
     for (let i = 0; i < trackingKeypoints.length; i++) {
-      const keypointIndex = trackingKeypoints[i];
-      const keypoint = pose.keypoints[keypointIndex];
+      const idx = trackingKeypoints[i];
+      const k = pose.keypoints[idx];
 
-      if (keypoint && keypoint.confidence > minConfidence) {
-        const currentPos = { x: keypoint.x, y: keypoint.y };
-
+      if (k && k.confidence > minConfidence) {
+        const cur = { x: k.x, y: k.y };
         if (this.poseLastPositions[poseIndex][i]) {
-          const lastPos = this.poseLastPositions[poseIndex][i];
-          const distance = Math.sqrt(
-            Math.pow(currentPos.x - lastPos.x, 2) + Math.pow(currentPos.y - lastPos.y, 2)
-          );
-          totalMovement += distance;
+          const last = this.poseLastPositions[poseIndex][i];
+          const dx = cur.x - last.x;
+          const dy = cur.y - last.y;
+          const dist = Math.sqrt(dx * dx + dy * dy);
+          totalMovement += dist;
           validKeypoints++;
         }
-
-        this.poseLastPositions[poseIndex][i] = currentPos;
+        this.poseLastPositions[poseIndex][i] = cur;
       }
     }
 
-    // Calculate average movement
     const avgMovement = validKeypoints > 0 ? totalMovement / validKeypoints : 0;
 
-    // Update stillness time
+    // Stillness timer (kept for potential future dynamics)
     if (avgMovement < this.poseMovementThreshold) {
-      this.poseStillnessTime[poseIndex] += 16; // Assuming ~60fps
+      this.poseStillnessTime[poseIndex] += 16; // ~60 fps
     } else {
       this.poseStillnessTime[poseIndex] = 0;
     }
 
-    // Change colors if person is moving a lot
+    // Color dynamics for circles/trails (kept lightweight)
     if (avgMovement > this.poseMovementThreshold * 2) {
-      // High movement - change colors frequently for random keypoints
       if (Math.random() < 0.15) {
-        // 15% chance per frame to change a random keypoint color
-        const randomKeypointIndex = Math.floor(Math.random() * 17); // 17 keypoints total
+        const randomKeypointIndex = Math.floor(Math.random() * 17);
         this.poseColors[poseIndex][randomKeypointIndex] = this.getRandomColor();
       }
     } else if (avgMovement > this.poseMovementThreshold) {
-      // Medium movement - change colors occasionally for random keypoints
       if (Math.random() < 0.03) {
-        // 3% chance per frame to change a random keypoint color
-        const randomKeypointIndex = Math.floor(Math.random() * 17); // 17 keypoints total
+        const randomKeypointIndex = Math.floor(Math.random() * 17);
         this.poseColors[poseIndex][randomKeypointIndex] = this.getRandomColor();
       }
     }
-    // Low movement - colors stay the same (no color change)
+
+    /* ---------------- Fireworks trigger ----------------
+     * Condition: mode === "fireworks" AND (both hands above shoulder line) AND sufficient movement
+     * Behavior: open/extend a sustain window and emit chained bursts at a slower cadence
+     */
+    if (this.paintMode === "fireworks") {
+      const lw = pose.keypoints[9]; // leftWrist
+      const rw = pose.keypoints[10]; // rightWrist
+      const ls = pose.keypoints[5]; // leftShoulder
+      const rs = pose.keypoints[6]; // rightShoulder
+
+      const haveAll =
+        lw &&
+        rw &&
+        ls &&
+        rs &&
+        lw.confidence > minConfidence &&
+        rw.confidence > minConfidence &&
+        ls.confidence > minConfidence &&
+        rs.confidence > minConfidence;
+
+      if (haveAll) {
+        const shoulderY = (ls.y + rs.y) / 2;
+
+        // Small margin so slight noise doesn't kill the trigger
+        const handsUp = lw.y < shoulderY - 10 && rw.y < shoulderY - 10;
+
+        // More permissive sustained window:
+        //  - High movement relative to (lowered) threshold, OR
+        //  - Hands-up fallback if we've been quiet for a while.
+        if (
+          (avgMovement > this.poseMovementThreshold * 1.3 && handsUp) ||
+          (handsUp && millis() - this.fireworksCooldown > 1000)
+        ) {
+          this.fireworksActiveUntil = millis() + 2500; // longer sustain window
+        }
+
+        // While inside sustain window, emit chained bursts at a fixed interval
+        if (millis() < this.fireworksActiveUntil) {
+          if (millis() - this.fireworksCooldown > this.fireworksInterval) {
+            const pick = () =>
+              this.colorPalette[Math.floor(Math.random() * this.colorPalette.length)];
+
+            // Alternate hands to reduce density (left this tick, right next tick)
+            this._fwAlt = (this._fwAlt || 0) ^ 1;
+            if (this._fwAlt === 0) {
+              this.fireworks.trigger(lw.x, lw.y, pick()); // left hand burst
+            } else {
+              this.fireworks.trigger(rw.x, rw.y, pick()); // right hand burst
+            }
+
+            // Occasionally add a small crown above the head (rare, intentional)
+            const head = pose.keypoints[0]; // nose
+            if (head && head.confidence > minConfidence && Math.random() < 0.25) {
+              this.fireworks.trigger(head.x, head.y - 40, pick());
+            }
+
+            // Rare torso halo (subtle, fewer points) to avoid "confetti" feel
+            const hasHips =
+              pose.keypoints[11] &&
+              pose.keypoints[12] &&
+              pose.keypoints[11].confidence > minConfidence &&
+              pose.keypoints[12].confidence > minConfidence;
+            if (hasHips && Math.random() < 0.15) {
+              const torso = {
+                x: (pose.keypoints[11].x + pose.keypoints[12].x) / 2,
+                y: (pose.keypoints[11].y + pose.keypoints[12].y) / 2,
+              };
+              const ringCount = 4; // fewer points than the explosive version
+              const ringRadius = 50; // slightly tighter
+              for (let r = 0; r < ringCount; r++) {
+                const ang = (TWO_PI * r) / ringCount;
+                const rx = torso.x + Math.cos(ang) * ringRadius;
+                const ry = torso.y + Math.sin(ang) * ringRadius;
+                this.fireworks.trigger(rx, ry, pick());
+              }
+            }
+
+            // cadence control
+            this.fireworksCooldown = millis();
+          }
+        }
+      }
+    }
   }
 
   clearTrails() {
@@ -387,5 +577,7 @@ class PoseVisualizer {
     this.poseColors = [];
     this.poseLastPositions = [];
     this.poseStillnessTime = [];
+    // Also clear fireworks when resetting
+    this.fireworks.clear();
   }
 }

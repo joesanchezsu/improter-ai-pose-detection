@@ -31,7 +31,7 @@ let offsetY = 0;
 let poseVisualizer;
 let particleSystem;
 let smokeSystem;
-let fireworksSystem;
+// Note: Fireworks system is now integrated into PoseVisualizer
 let cameraOpacity = 100; // New variable to control camera visibility
 let cameraMirror = true; // Variable to control camera mirroring
 
@@ -87,7 +87,7 @@ function setup() {
   poseVisualizer = new PoseVisualizer();
   particleSystem = new ParticleSystem();
   smokeSystem = new SmokeSystem();
-  fireworksSystem = new FireworksSystem();
+  // Note: Fireworks system is now integrated into PoseVisualizer
 
   // Set initial frame rate
   frameRate(60);
@@ -232,7 +232,7 @@ function displayPoseInfo() {
     const particleCount = particleSystem.getTotalParticles();
     text(`Particles: ${particleCount}`, 10, 45);
   } else if (poseVisualizer.paintMode === "fireworks") {
-    const fireworksCount = fireworksSystem.fireworks.length;
+    const fireworksCount = poseVisualizer.fireworks.fireworks.length;
     text(`Fireworks: ${fireworksCount}`, 10, 45);
   } else if (poseVisualizer.paintMode === "smoke") {
     const smokeCount = smokeSystem.getTotalParticles();
@@ -332,8 +332,7 @@ function setupUI() {
       // Only switch to fireworks if currently in circles mode
       if (poseVisualizer.paintMode === "circles") {
         poseVisualizer.setMode("fireworks");
-        fireworksSystem.setEnabled(true);
-        fireworksSystem.clear(); // clear old fireworks
+        poseVisualizer.fireworks.clear(); // clear old fireworks
         console.log("Switched to fireworks mode");
       } else {
         console.log("Space bar ignored - not in circles mode");
@@ -723,9 +722,7 @@ function handleModeSwitching() {
   // Check if we're in fireworks mode and should go back to smoke (only 1 person)
   if (poseVisualizer.paintMode === "fireworks" && poses.length === 1) {
     poseVisualizer.setMode("smoke");
-    fireworksSystem.setEnabled(false);
-    // poseVisualizer.triggerFireworksMode = false;
-    fireworksSystem.clear();
+    poseVisualizer.fireworks.clear();
     // No UI change in presentation mode
   }
 }
@@ -829,26 +826,24 @@ function paintOnCanvas() {
       particleSystem.emitFromPose(scaledPose, connections, visualSettings.minConfidence);
     }
   } else if (poseVisualizer.paintMode === "fireworks") {
-    // Fireworks mode: emit bursts and draw
-    for (let pose of poses) {
-      let scaledPose = {
-        keypoints: pose.keypoints.map((keypoint) => {
-          // Convert to WEBGL coordinates (centered coordinate system)
-          let x = keypoint.x * scaleX - width / 2;
-          let y = keypoint.y * scaleY - height / 2;
+    // Fireworks mode: use the integrated fireworks system in pose visualizer
+    // The fireworks are handled by the pose visualizer's updateMovementTracking method
+    // Just pass the poses to the visualizer - it will handle everything
+    let scaledPoses = poses.map((pose) => ({
+      keypoints: pose.keypoints.map((keypoint) => {
+        let x = keypoint.x * scaleX;
+        let y = keypoint.y * scaleY;
 
-          // Flip X coordinate if camera is mirrored
-          if (cameraMirror) {
-            x = -x;
-          }
+        // Flip X coordinate if camera is mirrored
+        if (cameraMirror) {
+          x = width - x;
+        }
 
-          return { x, y, confidence: keypoint.confidence };
-        }),
-      };
-
-      fireworksSystem.emitFromPose(scaledPose, visualSettings.minConfidence);
-    }
-    return; // Don't draw circles when in fireworks mode
+        return { x, y, confidence: keypoint.confidence };
+      }),
+    }));
+    poseVisualizer.visualize(scaledPoses, connections, visualSettings.minConfidence);
+    return; // Don't draw anything else when in fireworks mode
   } else if (poseVisualizer.paintMode === "smoke") {
     for (let pose of poses) {
       // Create a scaled copy of the pose for smoke
@@ -903,7 +898,7 @@ function clearVisualizationCanvas() {
   poseVisualizer.clearPoseTracking();
   particleSystem.clear();
   smokeSystem.clear();
-  fireworksSystem.clear();
+  // Note: poseVisualizer.clearPoseTracking() already clears fireworks
 }
 
 // Save visualization canvas
@@ -919,8 +914,6 @@ function updateParticles() {
   if (poseVisualizer.paintMode === "particles") {
     particleSystem.update();
     particleSystem.draw();
-  } else if (poseVisualizer.paintMode === "fireworks") {
-    fireworksSystem.updateAndDraw();
   } else if (poseVisualizer.paintMode === "smoke") {
     // Apply wind force based on mouse position (like reference code)
     // Ensure we're using the correct canvas dimensions
@@ -935,4 +928,5 @@ function updateParticles() {
     smokeSystem.applyForce(wind);
     smokeSystem.run();
   }
+  // Note: Fireworks are now handled by the pose visualizer, not here
 }
